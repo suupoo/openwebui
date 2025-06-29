@@ -32,13 +32,16 @@ services:
     networks:
       - webui-network
     # GPUプランにアップグレードした場合に、このコメントを解除する
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+          memory: 8G  # 8GBのRAMを予約
+        limits:
+          memory: 16G # RAMの使用量を最大16GBに制限
 
   # サービス3: Open Web UI (チャット画面担当)
   open-webui:
