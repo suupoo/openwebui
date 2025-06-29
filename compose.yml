@@ -1,0 +1,78 @@
+# version '3.8' を指定
+version: '3.8'
+
+# 起動する各コンテナ（サービス）を定義
+services:
+  # サービス1: Nginx Proxy Manager (リバースプロキシ & SSL担当)
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      # インターネットに公開するポート
+      - '80:80'    # HTTP
+      - '443:443'  # HTTPS
+      # 管理画面にアクセスするためのポート
+      - '81:81'
+    volumes:
+      # 設定データとSSL証明書を永続化するために、ホストのフォルダと連携
+      - ./nginx-proxy-manager/data:/data
+      - ./nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+    networks:
+      - webui-network
+
+  # サービス2: Ollama (AIモデル実行担当)
+  ollama:
+    image: 'ollama/ollama:latest'
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      # ダウンロードしたAIモデルを永続化
+      - ./ollama:/root/.ollama
+    networks:
+      - webui-network
+    # GPUプランにアップグレードした場合に、このコメントを解除する
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # サービス3: Open Web UI (チャット画面担当)
+  open-webui:
+    image: 'ghcr.io/open-webui/open-webui:main'
+    container_name: open-webui
+    restart: unless-stopped
+    # Ollamaサービスが起動してから、このサービスを起動する
+    depends_on:
+      - ollama
+    environment:
+      # コンテナ名"ollama"で、内部ネットワーク経由でAIに接続する
+      - 'OLLAMA_BASE_URL=http://ollama:11434'
+    volumes:
+      # Web UI自体の設定データを永続化
+      - ./open-webui:/app/backend/data
+    networks:
+      - webui-network
+
+  # サービス4: Whisper (openai/whisperベースの代替イメージ)
+  whisper-api:
+    image: onerahmet/openai-whisper-asr-webservice:latest # 評価の高い代替イメージに変更
+    container_name: whisper-api
+    restart: unless-stopped
+    ports:
+      # このイメージの内部ポートは9000番なので、VPSの8090番に接続
+      - '8090:9000'
+    environment:
+      # 環境変数でモデルや設定を指定します
+      - ASR_MODEL=medium        # mediumモデルを使用
+      - ASR_LANGUAGE=ja         # 言語を日本語に指定
+    networks:
+      - webui-network
+
+# コンテナ間の通信に使うネットワークを定義
+networks:
+  webui-network:
+    driver: bridge
